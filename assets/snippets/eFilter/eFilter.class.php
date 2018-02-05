@@ -65,12 +65,19 @@ public $nosort_tv_id = array();
 //тип фильтра для DocLister. По умолчанию - tvd
 public $dl_filter_type;
 
+//id tv, с помощью которого товары привязываются к категориям с помощью плагина tagSaver
+public $tv_category_tag = 0;
+
+//все продукты категории с учетом тегованных
+public $categoryAllProducts = false;
+
 public function __construct($modx, $params)
 {
     $this->modx = $modx;
     $this->params = $params;
     $this->param_tv_id = $this->params['param_tv_id'];
     $this->param_tv_id_simple = $this->params['param_tv_id_simple'];
+    $this->tv_category_tag = isset($this->params['tv_category_tag']) && (int)$this->params['tv_category_tag'] > 0 ? (int)$this->params['tv_category_tag'] : 0;
     $this->param_tv_name = $this->getParamTvName();
     $this->param_tv_name_simple = $this->getParamTvName($this->param_tv_id_simple);
     $this->product_templates_id = $this->params['product_templates_id'];
@@ -78,12 +85,16 @@ public function __construct($modx, $params)
     $this->docid = isset($this->params['docid']) ? $this->params['docid'] : $this->modx->documentIdentifier;
     $this->cfg = (isset($this->params['cfg']) && $this->params['cfg'] != '') ? $this->params['cfg'] : 'default';
     $this->params['remove_disabled'] = isset($this->params['remove_disabled']) && $this->params['remove_disabled'] != '0' ? '1' : '0';
+    $this->params['btn_text'] = isset($this->params['btn_text']) && $this->params['btn_text'] != '' ? $this->params['btn_text'] : 'Найти';
+    $this->params['form_method'] = 'get';
     $this->zero = isset($this->params['hide_zero']) ? '' : '0';
     $this->pattern_folder = (isset($this->params['pattern_folder']) && $this->params['pattern_folder'] != '') ? $this->params['pattern_folder'] : 'assets/images/pattern/';
     $this->nosort_tv_id = isset($this->params['nosort_tv_id']) ? explode(',', $this->params['nosort_tv_id']) : array();
     $this->dl_filter_type = isset($this->params['dl_filter_type']) ? $this->params['dl_filter_type'] : 'tvd';
     $this->getFP ();
     $this->prepareGetParams($this->fp);
+    $this->endings = isset($this->params['endings']) && $this->params['endings'] != '' ? explode(',', $this->params['endings']) : array('товар', 'товара', 'товаров');
+    $this->cntTpl = isset($this->params['cnt_tpl']) && $this->params['cnt_tpl'] != '' ? $this->params['cnt_tpl'] : 'Найдено: [+cnt+] [+ending+]';
 }
 
 public function getParamTvName($tv_id = '')
@@ -92,18 +103,21 @@ public function getParamTvName($tv_id = '')
     return $this->modx->db->getValue("SELECT `name` FROM " . $this->modx->getFullTableName('site_tmplvars') . " WHERE id = {$tv_id} LIMIT 0,1");
 }
 
-public function getFilterParam ($param_tv_name)
+public function getFilterParam ($param_tv_name, $docid = 0)
 {
+    if (!$docid) {
+        $docid = $this->docid;
+    }
     $filter_param = array();
     $tv_config = isset ($this->params['tv_config']) ? $this->params['tv_config'] : '';
     if ($tv_config != '') {
         $filter_param = json_decode($tv_config, true);
     } else {
-        $param_tv_val = $this->modx->runSnippet("DocInfo", array('docid'=>$this->docid, 'tv'=>'1', 'field'=>$param_tv_name));
+        $param_tv_val = $this->modx->runSnippet("DocInfo", array('docid' => $docid, 'tv' => '1', 'field' => $param_tv_name));
         if ($param_tv_val != '' && $param_tv_val != '{"fieldValue":[{"param_id":""}],"fieldSettings":{"autoincrement":1}}') {//если задано для категории, ее и берем
             $filter_param = json_decode($param_tv_val, true);
         } else {//если не задано, идем к родителю
-            $filter_param = $this->_getParentParam ($this->docid, $param_tv_name);
+            $filter_param = $this->_getParentParam ($docid, $param_tv_name);
         }
     }
     return $filter_param;
@@ -133,6 +147,7 @@ public function makeFilterArrays()
             $this->filters[$v['param_id']]['type'] = $v['fltr_type'];
             $this->filters[$v['param_id']]['name'] = $v['fltr_name'];
             $this->filters[$v['param_id']]['many'] = $v['fltr_many'];
+            $this->filters[$v['param_id']]['href'] = $v['fltr_href'];
         }
         if ($v['list_yes'] == '1'){
             $this->list_tv_ids[] = $v['param_id'];
@@ -199,6 +214,9 @@ public function renderFilterBlock ($filter_cats, $filter_values_full, $filter_va
                         $i = 0;
                         foreach ($filter_values_full[$tv_id] as $k => $v) {
                             $tv_val_name = isset($tv_elements[$tv_id][$k]) ? $tv_elements[$tv_id][$k] : $k;
+                            if ($filters[$tv_id]['href'] == '1' && is_int($k)) {
+                                $tv_val_name = '<a href="' . $this->modx->makeUrl($k) . '">' . $tv_val_name . '</a>';
+                            }
                             $selected = '  ';
                             if (isset ($this->fp[$tv_id])) {
                                 $flag = false;
@@ -314,6 +332,9 @@ public function renderFilterBlock ($filter_cats, $filter_values_full, $filter_va
                         $i = 0;
                         foreach ($filter_values_full[$tv_id] as $k => $v) {
                             $tv_val_name = isset($tv_elements[$tv_id][$k]) ? $tv_elements[$tv_id][$k] : $k;
+                            if ($filters[$tv_id]['href'] == '1' && is_int($k)) {
+                                $tv_val_name = '<a href="' . $this->modx->makeUrl($k) . '">' . $tv_val_name . '</a>';
+                            }
                             $selected = '  ';
                             if (isset ($this->fp[$tv_id])) {
                                 $flag = false;
@@ -440,6 +461,9 @@ public function renderFilterBlock ($filter_cats, $filter_values_full, $filter_va
                         $i = 0;
                         foreach ($filter_values_full[$tv_id] as $k => $v) {
                             $tv_val_name = isset($tv_elements[$tv_id][$k]) ? $tv_elements[$tv_id][$k] : $k;
+                            if ($filters[$tv_id]['href'] == '1' && is_int($k)) {
+                                $tv_val_name = '<a href="' . $this->modx->makeUrl($k) . '">' . $tv_val_name . '</a>';
+                            }
                             $selected = '  ';
                             $label_selected = '';
                             if (isset ($this->fp[$tv_id])) {
@@ -483,6 +507,9 @@ public function renderFilterBlock ($filter_cats, $filter_values_full, $filter_va
                         $i = 0;
                         foreach ($filter_values_full[$tv_id] as $k => $v) {
                             $tv_val_name = isset($tv_elements[$tv_id][$k]) ? $tv_elements[$tv_id][$k] : $k;
+                            if ($filters[$tv_id]['href'] == '1' && is_int($k)) {
+                                $tv_val_name = '<a href="' . $this->modx->makeUrl($k) . '">' . $tv_val_name . '</a>';
+                            }
                             $selected = '  ';
                             $label_selected = '';
                             if (isset ($this->fp[$tv_id])) {
@@ -526,6 +553,9 @@ public function renderFilterBlock ($filter_cats, $filter_values_full, $filter_va
                         $i = 0;
                         foreach ($filter_values_full[$tv_id] as $k => $v) {
                             $tv_val_name = isset($tv_elements[$tv_id][$k]) ? $tv_elements[$tv_id][$k] : $k;
+                            if ($filters[$tv_id]['href'] == '1' && is_int($k)) {
+                                $tv_val_name = '<a href="' . $this->modx->makeUrl($k) . '">' . $tv_val_name . '</a>';
+                            }                          
                             $selected = '  ';
                             if (isset ($this->fp[$tv_id])) {
                                 $flag = false;
@@ -568,8 +598,11 @@ public function renderFilterBlock ($filter_cats, $filter_values_full, $filter_va
     }
     $tpl = $tplFilterForm;
     $resetTpl = $tplFilterReset;
-    $output = $output != '' ? $this->parseTpl(array('[+url+]', '[+wrapper+]'), array($this->modx->makeUrl($this->docid), $output), $tpl) : '';
-    $output .= $output != '' ? $this->parseTpl(array('[+reset_url+]'), array($this->modx->makeUrl($this->modx->documentIdentifier)), $resetTpl) : '';
+    $tmp = explode('?', $_SERVER['REQUEST_URI']);
+    $form_url = isset($tmp[0]) && !empty($tmp[0]) ? $tmp[0] : $this->modx->makeUrl($this->docid);
+	$form_result_cnt = isset($this->content_ids_cnt) && $this->content_ids_cnt != '' ? $this->parseTpl(array('[+cnt+]', '[+ending+]'), array($this->content_ids_cnt, $this->content_ids_cnt_ending), $this->cntTpl) : '';
+    $output = $output != '' ? $this->parseTpl(array('[+url+]', '[+wrapper+]', '[+btn_text+]', '[+form_result_cnt+]', '[+form_method+]'), array($form_url, $output, $this->params['btn_text'], $form_result_cnt, $this->params['form_method']), $tpl) : '';
+    $output .= $output != '' ? $this->parseTpl(array('[+reset_url+]'), array($form_url), $resetTpl) : '';
     return $output;
 }
 
@@ -688,6 +721,19 @@ public function makeAllContentIDs ($DLparams)
                 //$this->content_ids = str_replace(' ', '', substr($this->content_ids, 0, -1));
             }
         }
+    } else {//если ничего не искали и у нас есть список всех продуктов категории, их и ставим
+        if ($this->categoryAllProducts) {
+            $this->content_ids = $this->categoryAllProducts;
+        }
+    }
+
+    $this->content_ids_cnt = $this->content_ids != '' ? count(explode(',', $this->content_ids)) : (!empty($this->fp) ? '0' : '-1');
+    if ($this->content_ids_cnt != '-1' && $this->content_ids_cnt != '0') {
+        $this->content_ids_cnt_ending = $this->getNumEnding($this->content_ids_cnt, $this->endings);
+    } else if ($this->content_ids_cnt == '0') {
+        $this->content_ids_cnt_ending = isset($this->endings[2]) ? $this->endings : 'товаров';
+    } else {
+        $this->content_ids_cnt_ending = '';
     }
     return $this->content_ids;
 }
@@ -887,6 +933,87 @@ public function getListFromJson($json = '', $field = 'id', $separator = ',')
         $out = implode($separator, $_);
     }
     return $out;
+}
+
+//возвращает список всех дочерних товаров категории плюс товаров, прикрепленных к категории тегом tagSaver через tv с id=$tv_id
+public function getCategoryAllProducts($id, $tv_id)
+{
+    //если хотим искать только по заданным документам, то до вызова [!eFilter!] устанавливаем их спискок в плейсхолдер eFilter_search_ids
+    $search_ids = $this->modx->getPlaceholder("eFilter_search_ids");
+    if ($search_ids && $search_ids != '') {
+        $this->categoryAllProducts = $search_ids;
+        return $search_ids;
+    }
+
+    if (!$tv_id) return '';
+
+    //сначала ищем все товары, вложенные в данную категорию на глубину до 6
+    $p = array(
+        'parents' => $id,
+        'depth' => '6',
+        'JSONformat' => 'new',
+        'api' => 'id',
+        'selectFields' => 'c.id',
+        'makeUrl' => '0',
+        'debug' => '0',
+        'addWhereList' => 'template IN (' . $this->product_templates_id . ')'
+    );
+    $json = $this->modx->runSnippet("DocLister", $p);
+    $children = array();
+    if ($json && !empty($json)) {
+        $arr = json_decode($json, TRUE);
+        if (!empty($arr) && isset($arr['rows'])) {
+            $tmp2 = array();
+            foreach ($arr['rows'] as $v) {
+                $children[$v['id']] = '1';
+            }
+        }
+    }
+    //затем берем id всех товаров, привязанных к этой категории через tv category id=$tv_id
+    $sql = "SELECT a.*, b.* FROM " . $this->modx->getFullTableName("tags") . " a, " . $this->modx->getFullTableName("site_content_tags") . " b WHERE b.tv_id = " . $tv_id . " AND a.id = b.tag_id AND a.name='" . $id . "'";
+    $q = $this->modx->db->query($sql);
+    $tmp_docs = array();
+    while ($row = $this->modx->db->getRow($q)) {
+        $children[$row['doc_id']] = '1';
+    }
+    
+    //а также - товары, прикрепленные ко всем дочерним "категориям" относительно текущей категории (через tv "категория")
+    $childs = $this->modx->getChildIds($id);
+    if (!empty($childs)) {
+        $q1 = $this->modx->db->query("SELECT id FROM " . $this->modx->getFullTableName("site_content") . " WHERE id IN (" . implode(',', array_values($childs)) . ") AND deleted=0 AND published=1 AND isfolder=1");
+        $tmp_parents = array();
+        while($row = $this->modx->db->getRow($q1)) {
+            $tmp_parents[] = $row['id'];
+        }
+        if (!empty($tmp_parents)) {
+            $sql = "SELECT a.*, b.* FROM " . $this->modx->getFullTableName("tags") . " a, " . $this->modx->getFullTableName("site_content_tags") . " b WHERE b.tv_id = " . $tv_id . " AND a.id = b.tag_id AND a.name IN (" . implode(",", $tmp_parents) . ")";
+            $q = $this->modx->db->query($sql);
+            $tmp_docs = array();
+            while ($row = $this->modx->db->getRow($q)) {
+                $children[$row['doc_id']] = '1';
+            }
+        }
+    }
+    $this->categoryAllProducts = implode(',', array_keys($children));
+    return $this->categoryAllProducts;
+}
+
+public function getNumEnding($number, $endingArray)
+{
+    $number = $number % 100;
+    if ($number >= 11 && $number <= 19) {
+        $ending=$endingArray[2];
+    } else {
+        $i = $number % 10;
+        switch ($i) {
+            case (1): $ending = $endingArray[0]; break;
+            case (2):
+            case (3):
+            case (4): $ending = $endingArray[1]; break;
+            default: $ending=$endingArray[2];break;
+        }
+    }
+    return $ending;
 }
 
 }
