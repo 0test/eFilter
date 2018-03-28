@@ -7,24 +7,24 @@ $eFltr = new eFilter($modx, $params);
 
 $eFltr->modx->regClientCSS('assets/snippets/eFilter/html/css/eFilter.css');
 $eFltr->modx->regClientCSS('assets/snippets/eFilter/html/css/slider.css');
-$eFltr->modx->regClientStartupScript('assets/snippets/eFilter/html/js/jquery-ui.min.js');
-$eFltr->modx->regClientStartupScript('assets/snippets/eFilter/html/js/jquery.ui.touch-punch.min.js');
+$eFltr->modx->regClientScript('assets/snippets/eFilter/html/js/jquery-ui.min.js');
+$eFltr->modx->regClientScript('assets/snippets/eFilter/html/js/jquery.ui.touch-punch.min.js');
 //вкл ajax
 if (isset($params['ajax']) && $params['ajax'] == '1') {
-    $eFltr->modx->regClientStartupScript('<script>var eFiltrAjax = "1";</script>', array('plaintext' => true));
+    $eFltr->modx->regClientScript('<script>var eFiltrAjax = "1";</script>', array('plaintext' => true));
 }
 //автосабмит формы
 $autoSubmit = isset($params['autoSubmit']) ? $params['autoSubmit'] : '1';
-$eFltr->modx->regClientStartupScript('<script>var eFiltrAutoSubmit = "' . $autoSubmit . '";</script>', array('plaintext' => true));
+$eFltr->modx->regClientScript('<script>var eFiltrAutoSubmit = "' . $autoSubmit . '";</script>', array('plaintext' => true));
 //режим аякс: 1 - полный, 2 - перегружается только форма, а список по кнопке submit без ajax
-if (isset($params['ajax_mode']) && $params['ajax_mode'] != '') {
-    $eFltr->modx->regClientStartupScript('<script>var eFiltrAjaxMode = "' . $params['ajax_mode'] . '";</script>', array('plaintext' => true));
+if (isset($params['ajaxMode']) && $params['ajaxMode'] != '') {
+    $eFltr->modx->regClientScript('<script>var eFiltrAjaxMode = "' . $params['ajaxMode'] . '";</script>', array('plaintext' => true));
 }
 //изменять адрес url после запросов
-if (isset($params['change_state']) && $params['change_state'] != '') {
-    $eFltr->modx->regClientStartupScript('<script>var eFiltrChangeState = "' . $params['change_state'] . '";</script>', array('plaintext' => true));
+if (isset($params['changeState']) && $params['changeState'] != '') {
+    $eFltr->modx->regClientScript('<script>var eFiltrChangeState = "' . $params['changeState'] . '";</script>', array('plaintext' => true));
 }
-$eFltr->modx->regClientStartupScript('assets/snippets/eFilter/html/js/eFilter.js');
+$eFltr->modx->regClientScript('assets/snippets/eFilter/html/js/eFilter.js');
 
 //получаем значение параметров для категории товара в виде массива
 //если у ресурса не задано - смотрим родителя, если у родителя нет- смотрим дедушку
@@ -70,6 +70,10 @@ if (!empty($eFltr->list_tv_ids)) {
 //так и с использованием фильтра
 //на выходе получаем список id подходящих ресурсов через запятую
 $DLparams = array('parents' => $eFltr->docid, 'depth' => '3', 'addWhereList' => ((isset($eFltr->params['addWhereList']) && !empty($eFltr->params['addWhereList'])) ? $eFltr->params['addWhereList'] . ' AND ' : '') . 'c.template IN(' . $eFltr->params['product_templates_id'] . ')', 'makeUrl' => '0');
+$filter_ids = $modx->getPlaceholder("eFilter_filter_ids");
+if ($filter_ids && $filter_ids != '') {
+    $DLparams['addWhereList'] .= ' AND c.id IN (' . $filter_ids . ') ';
+}
 $DLparamsAPI = array('JSONformat' => 'new', 'api' => 'id', 'selectFields' => 'c.id');
 $allProducts = $eFltr->getCategoryAllProducts($eFltr->docid, $eFltr->tv_category_tag);
 if (!empty($allProducts) && $allProducts != '') {

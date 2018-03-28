@@ -45,7 +45,9 @@ if ($firstEmpty) {
 }
 switch ($action){
     case 'getParamsToMultiTV' :
-        $sql = "SELECT `id`,`caption` FROM " . $modx->getFullTableName('site_tmplvars') . " WHERE `category` IN (" . $param_cat_id . ") ORDER BY `rank` ASC, `caption` ASC";
+        $tmp = array_merge(array_map('trim', explode(',', $param_cat_id)), array_map('trim', explode(',', $param_cat_id_common)));
+        $tmp = array_diff($tmp, array(''));
+        $sql = "SELECT `id`,`caption` FROM " . $modx->getFullTableName('site_tmplvars') . " WHERE `category` IN (" . implode(',', $tmp) . ") ORDER BY `rank` ASC, `caption` ASC";
         $q = $modx->db->query($sql);
         while($row = $modx->db->getRow($q)){
             $out .= $row['caption'] . '==' . $row['id'] . '||';
@@ -63,6 +65,24 @@ switch ($action){
             //в выпадающем списке админки показываем вместе с id ресурса
             $out .= $row['pagetitle'] . (strpos($_SERVER['REQUEST_URI'], MGR_DIR) !== FALSE ? ' (' . $row['id'] . ')' : '') . '==' . $row['id'] . '||';
         }
+        break;
+
+    case 'showParamsFromTree':
+        $ids = isset($params['ids']) ? $params['ids'] : '';
+        $no_href = isset($nohref) ? true : false;
+        $arr = array();
+        if ($ids != '') {
+            $ids = str_replace('||', ',', $ids);
+            $q = $modx->db->query("SELECT id,pagetitle FROM " . $modx->getFullTableName("site_content") . " WHERE id IN (" . $ids . ") AND published=1 AND deleted=0");
+            while ($row = $modx->db->getRow($q)) {
+                if (!$no_href) {
+                    $arr[] = '<a href="' . $modx->makeUrl($row['id']) . '">' . $row['pagetitle'] . '</a>';
+                } else {
+                    $arr[] = $row['pagetitle'];
+                }
+            }
+        }
+        $out = implode(', ', $arr) . '  ';
         break;
     
     default:
